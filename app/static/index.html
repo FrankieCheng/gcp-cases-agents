@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Google Cloud Support Case Agent | 智能工单管理门户</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Top Navigation Header -->
+    <header class="top-header">
+      <div class="brand-group">
+        <div class="gcp-badge" aria-hidden="true">GCP</div>
+        <div>
+          <h1 class="brand-title">Google Cloud Support Case Agent</h1>
+          <p class="brand-subtitle">Cloud Support API v2 全生命周期智能工作台 · ADK + HITL Guardrails</p>
+        </div>
+      </div>
+
+      <div class="header-controls">
+        <div class="mode-pill-group" role="group" aria-label="运行模式切换">
+          <span class="mode-label">运行模式:</span>
+          <button type="button" id="btn-mode-mock" class="mode-btn active">MOCK 仿真引擎</button>
+          <button type="button" id="btn-mode-live" class="mode-btn">LIVE GCP API (testCase=True)</button>
+        </div>
+        <span id="session-status-badge" class="security-badge">CSRF &amp; RBAC Protected</span>
+        <button type="button" id="btn-logout" class="btn btn-outline-sm">安全退出</button>
+      </div>
+    </header>
+
+    <!-- Main 3-Column Workspace -->
+    <main class="workspace-grid">
+      <!-- Left Column: Project Selector, Filter & Support Case List -->
+      <aside class="panel sidebar-panel" aria-label="工单导航栏">
+        <div class="panel-header">
+          <div>
+            <label for="project-select" class="field-label">授权 GCP Project (RBAC 白名单)</label>
+            <select id="project-select" class="select-input"></select>
+          </div>
+          <div class="sidebar-actions">
+            <button type="button" id="btn-new-case-modal" class="btn btn-primary btn-block">
+              ＋ 新建工单向导 (HITL 预览)
+            </button>
+          </div>
+          <div class="filter-tabs" role="tablist" aria-label="工单状态过滤">
+            <button type="button" class="filter-tab active" data-filter="ALL">全部</button>
+            <button type="button" class="filter-tab" data-filter="OPEN">处理中</button>
+            <button type="button" class="filter-tab" data-filter="ESCALATED">已升级</button>
+            <button type="button" class="filter-tab" data-filter="CLOSED">已关闭</button>
+          </div>
+        </div>
+
+        <div id="case-list-container" class="case-list" aria-live="polite"></div>
+      </aside>
+
+      <!-- Center Column: Conversational Agent & HITL Confirmation Cards -->
+      <section class="panel chat-panel" aria-label="智能对话与确认流">
+        <div class="panel-header chat-header">
+          <div>
+            <h2 class="section-title">Cloud Support ADK 智能助手</h2>
+            <p class="section-caption">支持自然语言提单、自动匹配 CaseClassification、HITL 确认卡片拦截、查询与升级</p>
+          </div>
+          <span id="active-project-pill" class="project-pill">Project: gcp-prod-core-01</span>
+        </div>
+
+        <!-- Quick Action Chips -->
+        <div class="quick-chips" id="quick-chips-bar">
+          <button type="button" class="chip-btn" data-prompt="查看当前项目的所有未关闭工单">📂 查询未关闭工单</button>
+          <button type="button" class="chip-btn" data-prompt="帮我提一个 S2 工单：生产环境 Cloud SQL PostgreSQL 实例连接超时 connection timeout">➕ 提报 Cloud SQL 故障 (HITL)</button>
+          <button type="button" class="chip-btn" data-prompt="帮我提一个 S3 工单：GKE 节点池扩容提示 GCE_STOCKOUT 资源不足">➕ 提报 GKE 扩容工单 (HITL)</button>
+          <button type="button" class="chip-btn" data-prompt="检索 Vertex AI Gemini API 429 相关的工单分类">🔍 检索产品分类</button>
+        </div>
+
+        <!-- Conversation & HITL Cards Stream -->
+        <div id="chat-stream" class="chat-stream" aria-live="polite"></div>
+
+        <!-- Pending HITL Confirmation Cards Dock -->
+        <div id="hitl-cards-dock" class="hitl-cards-dock"></div>
+
+        <!-- Chat Input Composer -->
+        <form id="chat-form" class="chat-composer" autocomplete="off">
+          <textarea
+            id="chat-input"
+            class="chat-textarea"
+            rows="2"
+            maxlength="4000"
+            placeholder="描述您的 GCP 故障现象以生成工单确认卡片，或输入工单指令（Ctrl/⌘+Enter 发送，Enter 换行）..."
+            required
+          ></textarea>
+          <button type="submit" id="btn-send-chat" class="btn btn-primary">发送指令</button>
+        </form>
+      </section>
+
+      <!-- Right Column: Selected Case Details, Comments & Attachments -->
+      <aside class="panel detail-panel" aria-label="工单详情与附件面板">
+        <div id="case-detail-empty" class="empty-state">
+          <p class="empty-title">暂未选中工单</p>
+          <p class="empty-desc">请从左侧工单列表点击任意工单，以查看详情、历史评论流、上传诊断附件或发起升级。</p>
+        </div>
+
+        <div id="case-detail-content" class="detail-content hidden">
+          <div class="detail-top-bar">
+            <div class="detail-badges">
+              <span id="detail-severity-badge" class="sev-badge">S2</span>
+              <span id="detail-state-badge" class="state-badge">OPEN</span>
+              <span id="detail-escalated-badge" class="esc-badge hidden">ESCALATED</span>
+              <span id="detail-testcase-badge" class="test-badge">testCase=True</span>
+            </div>
+            <div class="detail-top-actions">
+              <button type="button" id="btn-open-escalate" class="btn btn-warning-sm">申请升级</button>
+              <button type="button" id="btn-close-case" class="btn btn-danger-sm">关闭工单</button>
+            </div>
+          </div>
+
+          <h3 id="detail-title" class="detail-title"></h3>
+          <p id="detail-case-name" class="detail-mono"></p>
+
+          <div class="meta-grid">
+            <div class="meta-item">
+              <span class="meta-label">产品分类 (CaseClassification)</span>
+              <span id="detail-classification" class="meta-value"></span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">订阅邮箱 (PII 已掩码脱敏)</span>
+              <span id="detail-subscribers" class="meta-value"></span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">时区 / 更新时间</span>
+              <span id="detail-updated" class="meta-value"></span>
+            </div>
+          </div>
+
+          <div class="detail-section">
+            <h4 class="subsection-title">故障详细描述</h4>
+            <div id="detail-description" class="detail-description-box"></div>
+          </div>
+
+          <!-- Attachments Upload & List -->
+          <div class="detail-section">
+            <div class="subsection-header">
+              <h4 class="subsection-title">安全诊断附件 (.txt/.log/.json/.pdf/.png/.jpg, ≤5MB)</h4>
+            </div>
+            <form id="attachment-upload-form" class="upload-bar">
+              <input
+                type="file"
+                id="attachment-file-input"
+                class="file-input"
+                accept=".txt,.log,.json,.pdf,.png,.jpg"
+                required
+              />
+              <button type="submit" class="btn btn-outline-sm">上传附件</button>
+            </form>
+            <div id="detail-attachments-list" class="attachments-list"></div>
+          </div>
+
+          <!-- Comments Timeline & Composer -->
+          <div class="detail-section comments-section">
+            <h4 class="subsection-title">工单沟通与评论记录 (Comments)</h4>
+            <div id="detail-comments-list" class="comments-timeline"></div>
+            <form id="comment-form" class="comment-composer">
+              <textarea
+                id="comment-input"
+                class="comment-textarea"
+                rows="2"
+                maxlength="4000"
+                placeholder="追加故障排查日志或回复 Google Cloud Support 工程师..."
+                required
+              ></textarea>
+              <button type="submit" class="btn btn-primary btn-block">追加评论</button>
+            </form>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <!-- Custom In-App Modal: Create Case Draft Wizard -->
+    <div id="modal-create-draft" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modal-create-title">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3 id="modal-create-title">新建 Google Cloud Support 工单草稿 (HITL)</h3>
+          <button type="button" id="btn-close-create-modal" class="modal-close-btn">✕</button>
+        </div>
+        <form id="form-create-draft" class="modal-body">
+          <div class="form-row">
+            <label for="draft-project-input" class="field-label">目标 GCP Project ID</label>
+            <select id="draft-project-input" class="select-input" required></select>
+          </div>
+          <div class="form-row">
+            <label for="draft-classification-input" class="field-label">产品组件分类 (CaseClassification)</label>
+            <select id="draft-classification-input" class="select-input" required></select>
+          </div>
+          <div class="form-row">
+            <label for="draft-severity-input" class="field-label">严重级别 (Severity)</label>
+            <select id="draft-severity-input" class="select-input" required>
+              <option value="S2">S2 - High Impact (生产环境严重受损)</option>
+              <option value="S3" selected>S3 - Medium Impact (部分功能受损)</option>
+              <option value="S1">S1 - Critical Impact (生产系统中断)</option>
+              <option value="S4">S4 - Low Impact (技术咨询/建议)</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label for="draft-title-input" class="field-label">工单标题 (Display Name)</label>
+            <input type="text" id="draft-title-input" class="text-input" minlength="4" maxlength="200" placeholder="例如：[PROD] Cloud SQL 实例主备切换后连接超时" required />
+          </div>
+          <div class="form-row">
+            <label for="draft-desc-input" class="field-label">详细故障现象与排查信息 (Description)</label>
+            <textarea id="draft-desc-input" class="chat-textarea" rows="4" minlength="10" maxlength="8000" placeholder="请提供故障发生时间（含时区）、报错原文、受影响资源名称及已执行的排查步骤..." required></textarea>
+          </div>
+          <div class="form-row">
+            <label for="draft-emails-input" class="field-label">抄送订阅邮箱 (逗号分隔，界面展示自动脱敏)</label>
+            <input type="text" id="draft-emails-input" class="text-input" placeholder="sre-oncall@example.com, dba@example.com" />
+          </div>
+          <div class="modal-footer">
+            <button type="button" id="btn-cancel-create-modal" class="btn btn-outline-sm">取消</button>
+            <button type="submit" class="btn btn-primary">生成 HITL 确认卡片</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Custom In-App Modal: Escalate Case Draft -->
+    <div id="modal-escalate-draft" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modal-escalate-title">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3 id="modal-escalate-title">申请升级工单 (Escalate Case · HITL 护栏)</h3>
+          <button type="button" id="btn-close-escalate-modal" class="modal-close-btn">✕</button>
+        </div>
+        <form id="form-escalate-draft" class="modal-body">
+          <div class="form-row">
+            <label for="escalate-reason-input" class="field-label">升级原因 (Escalation Reason)</label>
+            <select id="escalate-reason-input" class="select-input" required>
+              <option value="BUSINESS_IMPACT">BUSINESS_IMPACT - 严重业务影响扩大</option>
+              <option value="RESOLUTION_TIME">RESOLUTION_TIME - 解决耗时超出预期 SLA</option>
+              <option value="TECHNICAL_EXPERTISE">TECHNICAL_EXPERTISE - 需更高级别产品专家介入</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label for="escalate-just-input" class="field-label">升级业务影响说明 (Justification, 至少10个字符)</label>
+            <textarea id="escalate-just-input" class="chat-textarea" rows="3" minlength="10" maxlength="2000" placeholder="请说明当前业务受损范围与紧急升级理由..." required></textarea>
+          </div>
+          <div class="modal-footer">
+            <button type="button" id="btn-cancel-escalate-modal" class="btn btn-outline-sm">取消</button>
+            <button type="submit" class="btn btn-primary">生成升级确认卡片</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Custom In-App Confirmation Modal for Closing Case -->
+    <div id="modal-close-confirm" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modal-close-title">
+      <div class="modal-card modal-card-sm">
+        <div class="modal-header">
+          <h3 id="modal-close-title">确认关闭工单</h3>
+          <button type="button" id="btn-dismiss-close-modal" class="modal-close-btn">✕</button>
+        </div>
+        <div class="modal-body">
+          <p id="close-confirm-text" class="modal-text">您确定要将该支持工单状态标记为 CLOSED 吗？</p>
+          <div class="modal-footer">
+            <button type="button" id="btn-cancel-close-case" class="btn btn-outline-sm">返回</button>
+            <button type="button" id="btn-confirm-close-case" class="btn btn-danger-sm">确认关闭工单</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Non-blocking In-App Notification Toast Container -->
+    <div id="toast-container" class="toast-container" aria-live="assertive"></div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
