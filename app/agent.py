@@ -50,7 +50,7 @@ from app.tools import (
 
 logger = logging.getLogger(__name__)
 
-MODEL = os.getenv("CASE_AGENT_MODEL", "gemini-2.5-flash")
+MODEL = os.getenv("CASE_AGENT_MODEL", "gemini-4-hydrogen")
 
 AGENT_INSTRUCTION = """你是 **Google Cloud Support Case 智能管理专家 (Cloud Case Management Agent)**。
 你负责协助 Google Cloud 客户与合作伙伴通过 Google Cloud Support API v2 全生命周期管理技术支持工单。

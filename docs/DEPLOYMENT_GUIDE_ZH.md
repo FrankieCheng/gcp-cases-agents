@@ -17,13 +17,13 @@ flowchart LR
         WS["FeishuBot (WebSocket 长连接线程)"]
         API["FastAPI BFF & Web Portal (:8080)"]
         Mon["CaseUpdateMonitor (60s 增量同步守护线程)"]
-        Agent["Google ADK Agent (gemini-2.5-flash)"]
+        Agent["Google ADK Agent (gemini-4-hydrogen)"]
         Sec["安全网关 (CSRF / 魔数校验 / 密钥拦截与脱敏)"]
         DB[("SQLite 状态库 & 隔离上传目录")]
     end
 
     subgraph GCP["Google Cloud 服务"]
-        Vertex["Vertex AI (global / gemini-2.5-flash)"]
+        Vertex["Vertex AI (global / gemini-4-hydrogen)"]
         Support["Cloud Support API v2 (Cases / Comments / Attachments)"]
         SM["Secret Manager (Session & Feishu 密钥)"]
     end
@@ -46,7 +46,7 @@ flowchart LR
    - 必须开启 `--no-cpu-throttling`（CPU 始终分配）与 `min-instances=1`，否则 Cloud Run 在无 HTTP 请求时会冻结 CPU，导致飞书 WebSocket 断连及后台 `CaseUpdateMonitor` 轮询线程暂停。
    - 必须限制 `max-instances=1`，避免多实例竞争同一飞书 App 的长连接事件以及保证容器内 SQLite 草稿/订阅状态与暂存附件目录强一致。
 2. **Vertex AI 模型区域（`GOOGLE_CLOUD_LOCATION=global`）**：
-   - 系统默认使用最新 GA 的 **`gemini-2.5-flash`**（主智能体与飞书群聊相关性路由分类器共用），Vertex AI 端点区域需固定配置为 `global`。
+   - 系统默认使用最新 Gemini 4 系列高速智能体模型 **`gemini-4-hydrogen`**（主智能体与飞书群聊相关性路由分类器共用；亦可按需配置为 `gemini-4-argon` 或 `gemini-4-carbon`），Vertex AI 端点区域需固定配置为 `global`。
 
 ---
 
@@ -217,7 +217,7 @@ SUPPORT_API_MODE=MOCK CHAT_ENGINE=llm GOOGLE_CLOUD_PROJECT=demo-core-prod GOOGLE
 ```bash
 FORCE_TEST_CASE=true \
 CASE_POLL_INTERVAL_SECONDS=60 \
-CASE_AGENT_MODEL=gemini-2.5-flash \
+CASE_AGENT_MODEL=gemini-4-hydrogen \
 PROJECT=demo-core-prod \
 REGION=us-central1 \
 bash deployment/deploy_prod.sh
@@ -229,7 +229,7 @@ bash deployment/deploy_prod.sh
 ```bash
 FORCE_TEST_CASE=false \
 CASE_POLL_INTERVAL_SECONDS=60 \
-CASE_AGENT_MODEL=gemini-2.5-flash \
+CASE_AGENT_MODEL=gemini-4-hydrogen \
 PROJECT=demo-core-prod \
 REGION=us-central1 \
 bash deployment/deploy_prod.sh
@@ -251,11 +251,11 @@ bash deployment/deploy_prod.sh
 | `SUPPORT_API_MODE` | `MOCK`（生产脚本设为 `LIVE`） | `MOCK` 仅读写本地模拟库；`LIVE` 双向同步 Google Cloud Support API v2。 |
 | `FORCE_TEST_CASE` | `true` | `true` 时强制所有新建工单 `test_case=True`（不触发真人接单）；正式生产提单设为 `false`。 |
 | `ALLOWED_PROJECTS` | `gcp-prod-core-01,...` | 允许 Agent 与 API 操作的 GCP Project ID 白名单（逗号分隔），越权请求会被强拦截。 |
-| `CASE_AGENT_MODEL` | `gemini-2.5-flash` | ADK 主智能体及飞书群聊上下文分类器使用的 Gemini 模型名称。 |
+| `CASE_AGENT_MODEL` | `gemini-4-hydrogen` | ADK 主智能体及飞书群聊上下文分类器使用的 Gemini 4 模型名称（可选 `gemini-4-argon` / `gemini-4-carbon`）。 |
 | `CHAT_ENGINE` | `llm` | `llm` 使用 Gemini ADK 推理；`deterministic` 使用纯规则兜底编排器（离线测试用）。 |
 | `GOOGLE_GENAI_USE_VERTEXAI` | `true` | 使用 Vertex AI 企业级端点鉴权（基于 Cloud Run 运行时 Service Account ADC）。 |
 | `GOOGLE_CLOUD_PROJECT` | — | 调用 Vertex AI 模型计费与配额归属的 GCP Project ID。 |
-| `GOOGLE_CLOUD_LOCATION` | `global` | Vertex AI 模型区域（`gemini-2.5-flash` / `gemini-3.8-flash` 须设为 `global`）。 |
+| `GOOGLE_CLOUD_LOCATION` | `global` | Vertex AI 模型区域（`gemini-4-hydrogen` / `gemini-4-argon` / `gemini-4-carbon` 须设为 `global`）。 |
 | `SESSION_SECRET_KEY` | Secret Manager 注入 | 至少 32 字符，用于 HMAC-SHA256 签名 Web `__Host-session` Cookie 与 CSRF Token。 |
 | `FEISHU_APP_ID` | Secret Manager 注入 | 飞书企业自建应用 App ID（未配置则自动跳过启动飞书线程）。 |
 | `FEISHU_APP_SECRET` | Secret Manager 注入 | 飞书企业自建应用 App Secret。 |

@@ -34,7 +34,7 @@ def evaluate(instance):
 
     client = genai.Client()  # AI Studio (GEMINI_API_KEY) or Agent Platform (ADC)
     response = client.models.generate_content(
-        model=os.getenv("EVAL_JUDGE_MODEL", "gemini-2.5-flash"),
+        model=os.getenv("EVAL_JUDGE_MODEL", "gemini-4-hydrogen"),
         contents=prompt,
         config=types.GenerateContentConfig(
             temperature=0,  # deterministic grading

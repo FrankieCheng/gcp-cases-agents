@@ -36,7 +36,7 @@ fi
 
 FORCE_TEST_CASE="${FORCE_TEST_CASE:-true}"
 CASE_POLL_INTERVAL_SECONDS="${CASE_POLL_INTERVAL_SECONDS:-60}"
-CASE_AGENT_MODEL="${CASE_AGENT_MODEL:-gemini-2.5-flash}"
+CASE_AGENT_MODEL="${CASE_AGENT_MODEL:-gemini-4-hydrogen}"
 
 gcloud beta run deploy "${SERVICE}" \
   --project "${PROJECT}" --region "${REGION}" --source . \
